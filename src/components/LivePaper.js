@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Pusher from 'pusher-js';
 
 const LivePaper = () => {
   const [text, setText] = useState('');
-  const [connected, setConnected] = useState(false);
+  const [isSynced, setIsSynced] = useState(true);
+  const [lastSyncedText, setLastSyncedText] = useState('');
+  const timeoutRef = useRef(null);
 
   useEffect(() => {
-    Pusher.logToConsole = true;
-
     const pusher = new Pusher('f698ef5791fa3bf159bd', {
       cluster: 'us3'
     });
@@ -15,18 +15,13 @@ const LivePaper = () => {
     const channel = pusher.subscribe('live-paper');
     
     channel.bind('text-update', (data) => {
-      console.log('Received update:', data);
-      setText(data.text);
-    });
-
-    pusher.connection.bind('connected', () => {
-      console.log('Connected to Pusher');
-      setConnected(true);
-    });
-
-    pusher.connection.bind('disconnected', () => {
-      console.log('Disconnected from Pusher');
-      setConnected(false);
+      // Only update if we're not currently editing
+      if (data.text !== lastSyncedText) {
+        console.log('Received update');
+        setText(data.text);
+        setLastSyncedText(data.text);
+        setIsSynced(true);
+      }
     });
 
     return () => {
@@ -34,41 +29,54 @@ const LivePaper = () => {
       channel.unsubscribe();
       pusher.disconnect();
     };
-  }, []);
+  }, [lastSyncedText]);
 
-  const handleTextChange = async (e) => {
-    const newText = e.target.value;
-    setText(newText);
-    
+  const syncContent = async (content) => {
     try {
-      console.log('Sending update:', newText);
       const response = await fetch('/api/pusher', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: newText }),
+        body: JSON.stringify({ text: content }),
       });
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.ok) {
+        setLastSyncedText(content);
+        setIsSynced(true);
       }
-      
-      const data = await response.json();
-      console.log('API response:', data);
     } catch (error) {
-      console.error('Error sending update:', error);
+      console.error('Error syncing:', error);
+      setIsSynced(false);
     }
+  };
+
+  const handleTextChange = (e) => {
+    const newText = e.target.value;
+    setText(newText);
+    setIsSynced(false);
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Set a new timeout to sync after 1 second of no typing
+    timeoutRef.current = setTimeout(() => {
+      syncContent(newText);
+    }, 1000);
   };
 
   return (
     <div className="min-h-screen bg-zinc-900">
       <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
-        {connected ? (
-          <div className="text-zinc-500 text-sm mb-2">Connected</div>
-        ) : (
-          <div className="text-red-500 text-sm mb-2">Disconnected</div>
-        )}
+        <div className="text-sm mb-2">
+          {isSynced ? (
+            <span className="text-emerald-500">Saved</span>
+          ) : (
+            <span className="text-zinc-500">Editing...</span>
+          )}
+        </div>
         <textarea
           value={text}
           onChange={handleTextChange}
