@@ -9,16 +9,15 @@ const pusher = new Pusher({
 });
 
 export default async function handler(req, res) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
   try {
-    const { text } = req.body;
+    const { segments } = req.body;
     
     await pusher.trigger("live-paper", "text-update", {
-      text: text
+      segments: segments
     });
     
     res.status(200).json({ success: true });
