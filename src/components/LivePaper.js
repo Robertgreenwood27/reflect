@@ -8,7 +8,7 @@ const LivePaper = () => {
   const [textSegments, setTextSegments] = useState([]);
   const [isSynced, setIsSynced] = useState(true);
   const textareaRef = useRef(null);
-  const lastCursorPosition = useRef(null);
+  const lastTextRef = useRef('');
 
   const getColorForAge = (timestamp) => {
     const age = Date.now() - timestamp;
@@ -87,15 +87,14 @@ const LivePaper = () => {
     const newText = e.target.value;
     const currentTime = Date.now();
     const coldLength = getColdTextLength();
+    const lastText = lastTextRef.current;
     
     // Get the cursor position and selection
     const cursorPosition = e.target.selectionStart;
     const selectionEnd = e.target.selectionEnd;
-    lastCursorPosition.current = cursorPosition;
 
     // If trying to edit cold text, prevent the change
     if (cursorPosition < coldLength) {
-      // Restore the textarea to its previous state
       e.target.value = textSegments.map(s => s.text).join('');
       e.target.setSelectionRange(coldLength, coldLength);
       return;
@@ -114,16 +113,53 @@ const LivePaper = () => {
       }
     }
 
-    // Add the new text as a fresh segment, preserving line breaks
-    if (currentPosition < newText.length) {
-      const newContent = newText.slice(currentPosition);
-      newSegments.push({
-        text: newContent,
-        timestamp: currentTime
-      });
+    // Find what text was actually added or changed
+    const warmSegments = textSegments.slice(newSegments.length);
+    const oldWarmText = warmSegments.map(s => s.text).join('');
+    const newWarmText = newText.slice(currentPosition);
+
+    if (oldWarmText !== newWarmText) {
+      // Find the common prefix length
+      let prefixLength = 0;
+      while (prefixLength < oldWarmText.length && 
+             prefixLength < newWarmText.length && 
+             oldWarmText[prefixLength] === newWarmText[prefixLength]) {
+        prefixLength++;
+      }
+
+      // Keep existing segments up to the change point
+      let processedLength = 0;
+      for (const segment of warmSegments) {
+        if (processedLength + segment.text.length <= prefixLength) {
+          newSegments.push(segment);
+          processedLength += segment.text.length;
+        } else if (processedLength < prefixLength) {
+          // Split this segment
+          const keepLength = prefixLength - processedLength;
+          newSegments.push({
+            text: segment.text.slice(0, keepLength),
+            timestamp: segment.timestamp
+          });
+          break;
+        } else {
+          break;
+        }
+      }
+
+      // Add the new text as a fresh segment
+      if (prefixLength < newWarmText.length) {
+        newSegments.push({
+          text: newWarmText.slice(prefixLength),
+          timestamp: currentTime
+        });
+      }
+    } else {
+      // No changes to warm text, keep existing segments
+      newSegments = [...textSegments];
     }
 
     setTextSegments(newSegments);
+    lastTextRef.current = newText;
     setIsSynced(false);
     debouncedSync(newSegments);
 
@@ -142,7 +178,7 @@ const LivePaper = () => {
         style={{ 
           color: getColorForAge(segment.timestamp),
           transition: 'color 0.1s ease',
-          whiteSpace: 'pre-wrap'  // This preserves whitespace and line breaks
+          whiteSpace: 'pre-wrap'
         }}
       >
         {segment.text}
