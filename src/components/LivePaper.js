@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Pusher from 'pusher-js';
 import { debounce } from 'lodash';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useRouter } from 'next/router';
+import { ChevronLeft } from 'lucide-react';
 
 const COOLING_DURATION = 120000; // 2 minutes in milliseconds
 
-const LivePaper = () => {
-  const [textSegments, setTextSegments] = useState([]);
+const LivePaper = ({ documentId, initialContent = [] }) => {
+  const [textSegments, setTextSegments] = useState(initialContent);
   const [isSynced, setIsSynced] = useState(true);
   const textareaRef = useRef(null);
   const lastTextRef = useRef('');
+  const router = useRouter();
 
   const getColorForAge = (timestamp) => {
     const age = Date.now() - timestamp;
@@ -66,17 +71,29 @@ const LivePaper = () => {
 
   const syncContent = async (newSegments) => {
     try {
-      const response = await fetch('/api/pusher', {
+      // First sync with Pusher for real-time updates
+      await fetch('/api/pusher', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ segments: newSegments }),
       });
+
+      // Then update Firestore with only the cold segments
+      const coldSegments = newSegments.filter(segment => 
+        isTextCold(segment.timestamp)
+      );
       
-      if (response.ok) {
-        setIsSynced(true);
+      if (coldSegments.length > 0) {
+        const docRef = doc(db, 'documents', documentId);
+        await updateDoc(docRef, {
+          content: coldSegments,
+          lastModified: Date.now()
+        });
       }
+      
+      setIsSynced(true);
     } catch (error) {
       console.error('Error syncing:', error);
       setIsSynced(false);
@@ -189,12 +206,21 @@ const LivePaper = () => {
   return (
     <div className="min-h-screen bg-zinc-900">
       <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
-        <div className="text-sm mb-2">
-          {isSynced ? (
-            <span className="text-emerald-500">Saved</span>
-          ) : (
-            <span className="text-zinc-500">Editing...</span>
-          )}
+        <div className="flex items-center justify-between text-sm mb-2">
+          <button 
+            onClick={() => router.push('/')}
+            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 -ml-1"
+            aria-label="Back to documents"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div>
+            {isSynced ? (
+              <span className="text-emerald-500">Saved</span>
+            ) : (
+              <span className="text-zinc-500">Editing...</span>
+            )}
+          </div>
         </div>
         <div className="relative flex-grow">
           <textarea
