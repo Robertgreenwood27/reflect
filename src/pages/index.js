@@ -4,9 +4,10 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { useEffect, useState } from 'react';
 import { getUserDocuments, createDocument, deleteDocument } from '@/lib/firestore';
 import { useRouter } from 'next/router';
+import { Plus, LogOut } from 'lucide-react';
 
 function DocumentList() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -37,7 +38,7 @@ function DocumentList() {
   };
 
   const handleDelete = async (e, docId) => {
-    e.stopPropagation(); // Prevent navigation when clicking delete
+    e.stopPropagation();
     try {
       await deleteDocument(docId);
       setDocuments(documents.filter(doc => doc.id !== docId));
@@ -48,74 +49,94 @@ function DocumentList() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-white">Loading documents...</div>
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="text-emerald-500/30">...</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-white">My Documents</h1>
-        <button
-          onClick={handleCreateDocument}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 
-                   transition-colors"
-        >
-          New Document
-        </button>
-      </div>
+    <div className="min-h-screen bg-black text-emerald-300/70">
+      <button
+        onClick={signOut}
+        className="fixed top-4 right-4 w-8 h-8 rounded-sm
+                 border border-red-900/20 bg-black
+                 group relative overflow-hidden
+                 transition-all duration-500"
+        aria-label="Sign out"
+      >
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100
+                      bg-gradient-to-br from-red-900/20 via-red-800/10 to-transparent
+                      transition-opacity duration-700" />
+        <LogOut 
+          className="w-4 h-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                   text-red-700 group-hover:text-red-500/70
+                   transition-colors duration-500" 
+        />
+      </button>
 
-      {documents.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-zinc-400 mb-4">No documents yet</p>
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 mt-8">
+          {/* New Document Button */}
           <button
             onClick={handleCreateDocument}
-            className="text-blue-400 hover:text-blue-300 transition-colors"
+            className="aspect-square rounded-sm
+                     border border-emerald-900/20 bg-black
+                     group relative overflow-hidden
+                     transition-all duration-500"
           >
-            Create your first document
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100
+                          bg-gradient-to-br from-emerald-900/20 via-blue-900/10 to-transparent
+                          transition-opacity duration-700" />
+            <Plus 
+              className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                       text-emerald-700 group-hover:text-emerald-500/70
+                       transition-colors duration-500" 
+            />
           </button>
-        </div>
-      ) : (
-        <div className="grid gap-4">
+
+          {/* Document Cards */}
           {documents.map((doc) => (
             <div
               key={doc.id}
               onClick={() => router.push(`/documents/${doc.id}`)}
-              className="p-4 bg-zinc-800 rounded cursor-pointer hover:bg-zinc-700 
-                       transition-colors group relative"
+              className="aspect-square rounded-sm cursor-pointer
+                       border border-emerald-900/20 bg-black
+                       group relative overflow-hidden
+                       transition-all duration-500"
             >
-              <div className="flex items-center justify-between">
-                <h2 className="text-white font-medium">{doc.title}</h2>
-                <span className="text-zinc-400 text-sm">
-                  {new Date(doc.lastModified).toLocaleDateString()}
-                </span>
-              </div>
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100
+                          bg-gradient-to-br from-emerald-900/20 via-blue-900/10 to-transparent
+                          transition-opacity duration-700" />
               
-              {/* Delete button - only shows on hover */}
+              {/* Delete Button */}
               <button
                 onClick={(e) => handleDelete(e, doc.id)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 
-                         group-hover:opacity-100 transition-opacity p-2 
-                         hover:text-red-400 text-zinc-400"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100
+                         transition-opacity duration-300"
                 aria-label="Delete document"
               >
                 <svg 
-                  width="14" 
-                  height="14" 
+                  width="12" 
+                  height="12" 
                   viewBox="0 0 14 14" 
                   fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2"
+                  className="stroke-red-700 hover:stroke-red-500/70"
+                  strokeWidth="1"
                 >
                   <path d="M1 1L13 13M1 13L13 1" />
                 </svg>
               </button>
+
+              {/* Document Title */}
+              <div className="absolute bottom-2 left-2 right-2 truncate text-sm text-emerald-700
+                            group-hover:text-emerald-500/70 transition-colors duration-500">
+                {doc.title}
+              </div>
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

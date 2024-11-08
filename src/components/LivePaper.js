@@ -231,7 +231,7 @@ const LivePaper = ({ documentId, initialContent = [] }) => {
                      text-transparent caret-white whitespace-pre-wrap
                      placeholder-zinc-600 p-8 text-lg leading-relaxed
                      focus:outline-none focus:ring-0"
-            placeholder="Begin writing..."
+            placeholder="Write..."
             autoFocus
             spellCheck="false"
           />

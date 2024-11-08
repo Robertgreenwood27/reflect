@@ -2,6 +2,7 @@
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
+import { LogIn } from 'lucide-react';
 
 export default function Login() {
   const { user, signIn } = useAuth();
@@ -22,17 +23,23 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-900">
-      <div className="bg-zinc-800 p-8 rounded-lg shadow-lg">
-        <h1 className="text-2xl font-bold text-white mb-6">Live Paper</h1>
-        <button
-          onClick={handleSignIn}
-          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 
-                   transition-colors flex items-center justify-center gap-2"
-        >
-          Sign in with Google
-        </button>
-      </div>
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <button
+        onClick={handleSignIn}
+        className="aspect-square w-16 rounded-sm
+                 border border-emerald-900/20 bg-black
+                 group relative overflow-hidden
+                 transition-all duration-500"
+      >
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100
+                      bg-gradient-to-br from-emerald-900/20 via-blue-900/10 to-transparent
+                      transition-opacity duration-700" />
+        <LogIn 
+          className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                   text-emerald-700 group-hover:text-emerald-500/70
+                   transition-colors duration-500" 
+        />
+      </button>
     </div>
   );
 }
