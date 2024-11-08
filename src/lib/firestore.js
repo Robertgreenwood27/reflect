@@ -8,7 +8,8 @@ import {
   orderBy, 
   getDocs,
   doc,
-  getDoc
+  getDoc,
+  deleteDoc
 } from 'firebase/firestore';
 
 export async function createDocument(userId, title = 'Untitled') {
@@ -27,6 +28,15 @@ export async function createDocument(userId, title = 'Untitled') {
     throw error;
   }
 }
+
+export async function deleteDocument(docId) {
+    try {
+      await deleteDoc(doc(db, 'documents', docId));
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      throw error;
+    }
+  }
 
 export async function getUserDocuments(userId) {
   try {
