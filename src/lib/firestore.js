@@ -9,7 +9,8 @@ import {
   getDocs,
   doc,
   getDoc,
-  deleteDoc
+  deleteDoc,
+  updateDoc
 } from 'firebase/firestore';
 
 export async function createDocument(userId, title = 'Untitled') {
@@ -30,13 +31,13 @@ export async function createDocument(userId, title = 'Untitled') {
 }
 
 export async function deleteDocument(docId) {
-    try {
-      await deleteDoc(doc(db, 'documents', docId));
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      throw error;
-    }
+  try {
+    await deleteDoc(doc(db, 'documents', docId));
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    throw error;
   }
+}
 
 export async function getUserDocuments(userId) {
   try {
@@ -72,6 +73,44 @@ export async function getDocument(docId) {
     }
   } catch (error) {
     console.error('Error fetching document:', error);
+    throw error;
+  }
+}
+
+export async function updateDocumentTitle(docId, newTitle) {
+  try {
+    await updateDoc(doc(db, 'documents', docId), {
+      title: newTitle,
+      lastModified: Date.now()
+    });
+  } catch (error) {
+    console.error('Error updating document title:', error);
+    throw error;
+  }
+}
+
+export async function updateDocument(docId, data) {
+  try {
+    const docRef = doc(db, 'documents', docId);
+    await updateDoc(docRef, {
+      ...data,
+      lastModified: Date.now()
+    });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    throw error;
+  }
+}
+
+export async function saveDocumentContent(docId, content) {
+  try {
+    const docRef = doc(db, 'documents', docId);
+    await updateDoc(docRef, {
+      content,
+      lastModified: Date.now()
+    });
+  } catch (error) {
+    console.error('Error saving document content:', error);
     throw error;
   }
 }

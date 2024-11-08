@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Pusher from 'pusher-js';
-import { debounce } from 'lodash';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/router';
 import { ChevronLeft } from 'lucide-react';
+import { debounce } from 'lodash';
 
-const COOLING_DURATION = 120000; // 2 minutes in milliseconds
+const COOLING_DURATION = 30000; // 30 seconds in milliseconds
+const TYPING_DEBOUNCE = 500; // Wait 500ms after typing to sync
 
 const LivePaper = ({ documentId, initialContent = [] }) => {
   const [textSegments, setTextSegments] = useState(initialContent);
@@ -14,34 +15,72 @@ const LivePaper = ({ documentId, initialContent = [] }) => {
   const textareaRef = useRef(null);
   const lastTextRef = useRef('');
   const router = useRouter();
+  const hasUnsavedChanges = useRef(false);
 
-  const getColorForAge = (timestamp) => {
-    const age = Date.now() - timestamp;
-    const progress = Math.min(age / COOLING_DURATION, 1);
-    
-    const r = Math.round(255 - (progress * 180));
-    const g = Math.round(170 - (progress * 170));
-    const b = Math.round(100 + (progress * 155));
-    
-    return `rgb(${r}, ${g}, ${b})`;
-  };
-
-  const isTextCold = (timestamp) => {
-    return (Date.now() - timestamp) >= COOLING_DURATION;
-  };
-
-  const getColdTextLength = () => {
-    return textSegments.reduce((sum, segment) => {
-      return sum + (isTextCold(segment.timestamp) ? segment.text.length : 0);
-    }, 0);
-  };
-
-  const debouncedSync = useRef(
-    debounce((newSegments) => {
-      syncContent(newSegments);
-    }, 1000)
+  // Debounced Pusher sync
+  const debouncedPusherSync = useRef(
+    debounce((segments) => {
+      fetch('/api/pusher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segments }),
+      }).then(() => setIsSynced(true))
+        .catch(() => setIsSynced(false));
+    }, TYPING_DEBOUNCE)
   ).current;
 
+  // Save to Firestore only on exit
+  const saveToFirestore = async () => {
+    if (!hasUnsavedChanges.current) return;
+    
+    try {
+      const docRef = doc(db, 'documents', documentId);
+      await updateDoc(docRef, {
+        content: [{
+          text: textSegments.map(s => s.text).join(''),
+          timestamp: Date.now() - COOLING_DURATION // Save as cold text
+        }],
+        lastModified: Date.now()
+      });
+      hasUnsavedChanges.current = false;
+    } catch (error) {
+      console.error('Error saving to Firestore:', error);
+    }
+  };
+
+  const handleBack = async () => {
+    await saveToFirestore();
+    router.push('/');
+  };
+
+  // Handle page exit
+  useEffect(() => {
+    const handleUnload = () => {
+      if (hasUnsavedChanges.current) {
+        // Use sendBeacon for synchronous send before page close
+        const data = {
+          content: [{
+            text: textSegments.map(s => s.text).join(''),
+            timestamp: Date.now() - COOLING_DURATION
+          }],
+          lastModified: Date.now()
+        };
+
+        navigator.sendBeacon(
+          `/api/save-document/${documentId}`, 
+          JSON.stringify(data)
+        );
+      }
+    };
+
+    window.addEventListener('unload', handleUnload);
+    return () => {
+      window.removeEventListener('unload', handleUnload);
+      debouncedPusherSync.cancel();
+    };
+  }, []);
+
+  // Real-time collaboration setup
   useEffect(() => {
     const pusher = new Pusher('f698ef5791fa3bf159bd', {
       cluster: 'us3'
@@ -65,127 +104,58 @@ const LivePaper = ({ documentId, initialContent = [] }) => {
       channel.unsubscribe();
       pusher.disconnect();
       clearInterval(colorInterval);
-      debouncedSync.cancel();
     };
   }, []);
 
-  const syncContent = async (newSegments) => {
-    try {
-      // First sync with Pusher for real-time updates
-      await fetch('/api/pusher', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ segments: newSegments }),
-      });
+  const getColorForAge = (timestamp) => {
+    const age = Date.now() - timestamp;
+    const progress = Math.min(age / COOLING_DURATION, 1);
+    
+    const r = Math.round(255 - (progress * 180));
+    const g = Math.round(170 - (progress * 170));
+    const b = Math.round(100 + (progress * 155));
+    
+    return `rgb(${r}, ${g}, ${b})`;
+  };
 
-      // Then update Firestore with only the cold segments
-      const coldSegments = newSegments.filter(segment => 
-        isTextCold(segment.timestamp)
-      );
-      
-      if (coldSegments.length > 0) {
-        const docRef = doc(db, 'documents', documentId);
-        await updateDoc(docRef, {
-          content: coldSegments,
-          lastModified: Date.now()
-        });
-      }
-      
-      setIsSynced(true);
-    } catch (error) {
-      console.error('Error syncing:', error);
-      setIsSynced(false);
-    }
+  const isTextCold = (timestamp) => {
+    return (Date.now() - timestamp) >= COOLING_DURATION;
+  };
+
+  const getColdTextLength = () => {
+    return textSegments.reduce((sum, segment) => {
+      return sum + (isTextCold(segment.timestamp) ? segment.text.length : 0);
+    }, 0);
   };
 
   const handleTextChange = (e) => {
     const newText = e.target.value;
     const currentTime = Date.now();
     const coldLength = getColdTextLength();
-    const lastText = lastTextRef.current;
     
-    // Get the cursor position and selection
-    const cursorPosition = e.target.selectionStart;
-    const selectionEnd = e.target.selectionEnd;
-
-    // If trying to edit cold text, prevent the change
-    if (cursorPosition < coldLength) {
+    // Prevent editing cold text
+    if (e.target.selectionStart < coldLength) {
       e.target.value = textSegments.map(s => s.text).join('');
       e.target.setSelectionRange(coldLength, coldLength);
       return;
     }
 
-    let newSegments = [];
-    let currentPosition = 0;
-
-    // Keep all cold segments unchanged
-    for (const segment of textSegments) {
-      if (isTextCold(segment.timestamp)) {
-        newSegments.push(segment);
-        currentPosition += segment.text.length;
-      } else {
-        break;
+    // Create new segment for the change
+    const newSegments = [
+      ...textSegments.filter(s => isTextCold(s.timestamp)),
+      {
+        text: newText.slice(coldLength),
+        timestamp: currentTime
       }
-    }
-
-    // Find what text was actually added or changed
-    const warmSegments = textSegments.slice(newSegments.length);
-    const oldWarmText = warmSegments.map(s => s.text).join('');
-    const newWarmText = newText.slice(currentPosition);
-
-    if (oldWarmText !== newWarmText) {
-      // Find the common prefix length
-      let prefixLength = 0;
-      while (prefixLength < oldWarmText.length && 
-             prefixLength < newWarmText.length && 
-             oldWarmText[prefixLength] === newWarmText[prefixLength]) {
-        prefixLength++;
-      }
-
-      // Keep existing segments up to the change point
-      let processedLength = 0;
-      for (const segment of warmSegments) {
-        if (processedLength + segment.text.length <= prefixLength) {
-          newSegments.push(segment);
-          processedLength += segment.text.length;
-        } else if (processedLength < prefixLength) {
-          // Split this segment
-          const keepLength = prefixLength - processedLength;
-          newSegments.push({
-            text: segment.text.slice(0, keepLength),
-            timestamp: segment.timestamp
-          });
-          break;
-        } else {
-          break;
-        }
-      }
-
-      // Add the new text as a fresh segment
-      if (prefixLength < newWarmText.length) {
-        newSegments.push({
-          text: newWarmText.slice(prefixLength),
-          timestamp: currentTime
-        });
-      }
-    } else {
-      // No changes to warm text, keep existing segments
-      newSegments = [...textSegments];
-    }
+    ];
 
     setTextSegments(newSegments);
     lastTextRef.current = newText;
+    hasUnsavedChanges.current = true;
     setIsSynced(false);
-    debouncedSync(newSegments);
-
-    // Restore cursor position after React update
-    requestAnimationFrame(() => {
-      if (textareaRef.current) {
-        textareaRef.current.setSelectionRange(cursorPosition, selectionEnd);
-      }
-    });
+    
+    // Debounced sync to Pusher
+    debouncedPusherSync(newSegments);
   };
 
   const renderSegments = () => {
@@ -208,7 +178,7 @@ const LivePaper = ({ documentId, initialContent = [] }) => {
       <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
         <div className="flex items-center justify-between text-sm mb-2">
           <button 
-            onClick={() => router.push('/')}
+            onClick={handleBack}
             className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 -ml-1"
             aria-label="Back to documents"
           >
@@ -216,9 +186,9 @@ const LivePaper = ({ documentId, initialContent = [] }) => {
           </button>
           <div>
             {isSynced ? (
-              <span className="text-emerald-500">Saved</span>
+              <span className="text-emerald-500">●</span>
             ) : (
-              <span className="text-zinc-500">Editing...</span>
+              <span className="text-zinc-500">○</span>
             )}
           </div>
         </div>

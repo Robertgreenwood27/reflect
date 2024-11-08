@@ -2,7 +2,7 @@
 import { useAuth } from '@/components/AuthProvider';
 import { AuthGuard } from '@/components/AuthGuard';
 import { useEffect, useState } from 'react';
-import { getUserDocuments, createDocument, deleteDocument } from '@/lib/firestore';
+import { getUserDocuments, createDocument, deleteDocument, updateDocumentTitle } from '@/lib/firestore';
 import { useRouter } from 'next/router';
 import { Plus, LogOut } from 'lucide-react';
 
@@ -10,6 +10,7 @@ function DocumentList() {
   const { user, signOut } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -44,6 +45,18 @@ function DocumentList() {
       setDocuments(documents.filter(doc => doc.id !== docId));
     } catch (error) {
       console.error('Error deleting document:', error);
+    }
+  };
+
+  const handleTitleChange = async (docId, newTitle) => {
+    try {
+      await updateDocumentTitle(docId, newTitle);
+      setDocuments(documents.map(doc => 
+        doc.id === docId ? { ...doc, title: newTitle } : doc
+      ));
+      setEditingId(null);
+    } catch (error) {
+      console.error('Error updating title:', error);
     }
   };
 
@@ -99,7 +112,11 @@ function DocumentList() {
           {documents.map((doc) => (
             <div
               key={doc.id}
-              onClick={() => router.push(`/documents/${doc.id}`)}
+              onClick={() => {
+                if (!editingId) {
+                  router.push(`/documents/${doc.id}`);
+                }
+              }}
               className="aspect-square rounded-sm cursor-pointer
                        border border-emerald-900/20 bg-black
                        group relative overflow-hidden
@@ -128,10 +145,43 @@ function DocumentList() {
                 </svg>
               </button>
 
-              {/* Document Title */}
-              <div className="absolute bottom-2 left-2 right-2 truncate text-sm text-emerald-700
-                            group-hover:text-emerald-500/70 transition-colors duration-500">
-                {doc.title}
+              {/* Updated Title Section */}
+              <div 
+                className="absolute bottom-2 left-2 right-2"
+                onClick={e => e.stopPropagation()}
+              >
+                {editingId === doc.id ? (
+                  <input
+                    type="text"
+                    defaultValue={doc.title}
+                    autoFocus
+                    className="w-full bg-transparent text-sm text-emerald-500/70 
+                             border-b border-emerald-900/20
+                             focus:outline-none focus:border-emerald-700/40
+                             transition-colors duration-300"
+                    onBlur={e => handleTitleChange(doc.id, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        handleTitleChange(doc.id, e.target.value);
+                      } else if (e.key === 'Escape') {
+                        setEditingId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div
+                    onClick={e => {
+                      e.stopPropagation();
+                      setEditingId(doc.id);
+                    }}
+                    className="truncate text-sm text-emerald-700
+                             group-hover:text-emerald-500/70 
+                             transition-colors duration-500
+                             cursor-text"
+                  >
+                    {doc.title}
+                  </div>
+                )}
               </div>
             </div>
           ))}
