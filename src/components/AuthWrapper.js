@@ -1,30 +1,30 @@
-import { useEffect } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { Dashboard } from '../components/Dashboard';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useEffect, useState } from 'react';
 import { auth } from '../lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
-export default function Home() {
-  const { user, loading } = useAuth();
+export function AuthWrapper({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Add debugging
   useEffect(() => {
-    console.log('Auth State:', { user, loading });
-  }, [user, loading]);
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      console.log('Attempting Google sign in...');
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Error signing in with Google:', error);
     }
   };
 
-  // Add loading state handling
   if (loading) {
-    console.log('Loading auth state...');
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-white/50">Loading...</div>
@@ -32,11 +32,10 @@ export default function Home() {
     );
   }
 
-  // Check auth state
   if (!user) {
-    console.log('No user found, showing login page');
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center">
+        {/* Ambient background */}
         <div className="fixed inset-0 bg-gradient-to-br from-blue-900/20 to-emerald-900/20 pointer-events-none" />
         
         <div className="relative space-y-8 text-center">
@@ -55,6 +54,5 @@ export default function Home() {
     );
   }
 
-  console.log('User found, showing dashboard');
-  return <Dashboard />;
+  return children;
 }
