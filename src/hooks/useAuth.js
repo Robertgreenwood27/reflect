@@ -6,18 +6,19 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('Setting up auth listener');
+    // Start loading state
+    setLoading(true);
     
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+      console.log('Auth state changed:', { 
+        userId: user?.uid,
+        isAuthenticated: !!user 
+      });
       setUser(user);
       setLoading(false);
     });
 
-    return () => {
-      console.log('Cleaning up auth listener');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   return { user, loading };

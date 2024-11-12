@@ -8,17 +8,36 @@ import { useAuth } from '../hooks/useAuth';
 
 export function Dashboard() {
   const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
+    console.log('Dashboard useEffect - user state changed:', user?.uid);
+    
+    let unsubscribe = () => {};
 
-    const unsubscribe = documentsService.subscribeToUserDocuments(
-      user.uid,
-      (docs) => setDocuments(docs)
-    );
+    if (user) {
+      setLoading(true);
+      unsubscribe = documentsService.subscribeToUserDocuments(
+        user.uid,
+        (docs) => {
+          console.log('Received documents update:', {
+            count: docs.length,
+            ids: docs.map(d => d.id)
+          });
+          setDocuments(docs);
+          setLoading(false);
+        }
+      );
+    } else {
+      setDocuments([]);
+      setLoading(false);
+    }
 
-    return () => unsubscribe();
+    return () => {
+      console.log('Cleaning up documents subscription');
+      unsubscribe();
+    };
   }, [user]);
 
   const handleSignOut = async () => {
@@ -29,6 +48,14 @@ export function Dashboard() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white/50">Loading documents...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black">
       {/* Ambient background effect */}
@@ -37,7 +64,7 @@ export function Dashboard() {
       {/* Header */}
       <header className="relative border-b border-white/10">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <h1 className="text-white font-medium">Documents</h1>
+          <h1 className="text-white font-medium">Documents ({documents.length})</h1>
           <button
             onClick={handleSignOut}
             className="flex items-center gap-2 text-blue-200 hover:text-white transition-colors"
